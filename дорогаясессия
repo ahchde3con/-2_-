@@ -1,1 +1,149 @@
+import numpy as np
+import time
+from numpy.random import rand
+import scipy.linalg.blas as blas
+import sys
 
+
+print("\n" + "="*50)
+print("Студент: Аушева Рахима Рустемовна")
+print("Группа: 090304-РПИб-о24")
+print("="*50 + "\n")
+
+def generate_matrices(n):
+    """Генерация двух случайных матриц размера n x n"""
+    print(f"Генерация матриц {n}x{n}...")
+    sys.stdout.flush()
+    return rand(n, n).astype(np.float32), rand(n, n).astype(np.float32)
+
+def naive_matrix_mult(A, B):
+    """Наивное перемножение матриц по формуле из линейной алгебры"""
+    n = A.shape[0]
+    C = np.zeros((n, n), dtype=np.float32)
+    
+    print("Выполнение наивного перемножения...")
+    sys.stdout.flush()
+    
+    for i in range(n):
+        for j in range(n):
+            for k in range(n):
+                C[i, j] += A[i, k] * B[k, j]
+    return C
+
+def optimized_matrix_mult(A, B, block_size=64):
+    """Оптимизированное перемножение матриц с использованием блочного алгоритма"""
+    n = A.shape[0]
+    C = np.zeros((n, n), dtype=np.float32)
+    
+    print(f"Выполнение оптимизированного перемножения (блок {block_size}x{block_size})...")
+    sys.stdout.flush()
+    
+   
+    for i0 in range(0, n, block_size):
+        for j0 in range(0, n, block_size):
+            for k0 in range(0, n, block_size):
+                
+                i1 = min(i0 + block_size, n)
+                j1 = min(j0 + block_size, n)
+                k1 = min(k0 + block_size, n)
+                
+              
+                for i in range(i0, i1):
+                    for j in range(j0, j1):
+                        val = 0.0
+                        for k in range(k0, k1):
+                            val += A[i, k] * B[k, j]
+                        C[i, j] += val
+    return C
+
+def benchmark(matrix_mult_func, A, B, n, method_name):
+    """Замер времени выполнения и расчет производительности"""
+    print(f"\n--- {method_name} ---")
+    sys.stdout.flush()
+    
+    start_time = time.time()
+    C = matrix_mult_func(A, B)
+    end_time = time.time()
+    
+    t = end_time - start_time
+    c = 2 * n ** 3  # Вычислительная сложность
+    p = c / t / 1e6  # Производительность в MFLOPS
+    
+    print(f"Время: {t:.2f} сек")
+    print(f"Производительность: {p:.2f} MFLOPS")
+    
+    return t, p, C
+
+def verify_results(test_A, test_B):
+    """Проверка корректности реализации на маленьких матрицах"""
+    print("\nПроверка корректности на матрицах 4x4...")
+    sys.stdout.flush()
+    
+    naive_C = naive_matrix_mult(test_A, test_B)
+    blas_C = blas.sgemm(1.0, test_A, test_B)
+    opt_C = optimized_matrix_mult(test_A, test_B)
+    
+    if not np.allclose(naive_C, blas_C, atol=1e-5):
+        print("Ошибка: Наивный метод не совпадает с BLAS")
+        print("Разница:", np.max(np.abs(naive_C - blas_C)))
+    else:
+        print("Наивный метод: OK")
+    
+    if not np.allclose(opt_C, blas_C, atol=1e-5):
+        print("Ошибка: Оптимизированный метод не совпадает с BLAS")
+        print("Разница:", np.max(np.abs(opt_C - blas_C)))
+    else:
+        print("Оптимизированный метод: OK")
+
+def main():
+    n = 2048  # Размер матриц
+    
+    
+    if len(sys.argv) > 1:
+        try:
+            n = int(sys.argv[1])
+            print(f"Используется размер матрицы: {n}x{n}")
+        except ValueError:
+            print("Неверный аргумент. Используется размер по умолчанию 2048x2048")
+    
+   
+    A, B = generate_matrices(n)
+    
+   
+    if n > 4:
+        test_A, test_B = generate_matrices(4)
+        verify_results(test_A, test_B)
+    
+    # 1. Наивный метод (только для небольших матриц)
+    if n <= 256:
+        t_naive, p_naive, _ = benchmark(naive_matrix_mult, A, B, n, "1. Наивное перемножение")
+    else:
+        print("\n1. Наивное перемножение: пропущено (слишком большая матрица)")
+    
+    # 2. BLAS (Intel MKL)
+    t_blas, p_blas, _ = benchmark(lambda a, b: blas.sgemm(1.0, a, b), A, B, n, "2. BLAS (sgemm)")
+    
+    # 3. Оптимизированный метод
+    t_opt, p_opt, _ = benchmark(lambda a, b: optimized_matrix_mult(a, b, 64), A, B, n, "3. Оптимизированное перемножение")
+    
+    # Проверка производительности
+    if n > 4:
+        performance_ratio = p_opt / p_blas
+        print(f"\nОтношение производительности оптимизированного метода к BLAS: {performance_ratio:.2%}")
+        
+        if performance_ratio >= 0.3:
+            print("Оптимизированный метод удовлетворяет требованию (≥30% от BLAS)")
+        else:
+            print("Внимание: оптимизированный метод НЕ удовлетворяет требованию")
+    
+   
+    
+    print("\nГотово!")
+    sys.stdout.flush()
+
+if __name__ == "__main__":
+    print("Программа для сравнения методов перемножения матриц")
+    print("Использование: python matrix_mult.py [размер_матрицы]")
+    print("По умолчанию размер матрицы: 2048x2048\n")
+    
+    main()
